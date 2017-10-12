@@ -1,0 +1,59 @@
+.timeline {
+    bottom: 0;
+    left: 0;
+    overflow: hidden;
+    position: fixed;
+    right: 0;
+
+    &__play {
+        background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16.67 16.67'%3E%3Ctitle%3Eicon_play%3C/title%3E%3Cpolygon fill='%23000000' points='13.39 8.33 5.28 13.02 5.28 3.65 13.39 8.33'/%3E%3C/svg%3E");
+        background-repeat:no-repeat;
+        background-position: 50% 50%;
+        background-size: auto 20px;
+        float: left;
+        height: rem(32);
+        width: rem(55);
+
+        .pause & {
+            background-image: url("data:image/svg+xml;charset=utf8,%3Csvg version='1.1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' x='0px' y='0px' width='16.667px' height='16.667px' viewBox='0 0 16.667 16.667' enable-background='new 0 0 16.667 16.667' xml:space='preserve'%3E%3Cline fill='none' stroke='%23000000' stroke-width='2' stroke-miterlimit='10' x1='6.333' y1='4.166' x2='6.333' y2='12.5'/%3E%3Cline fill='none' stroke='%23000000' stroke-width='2' stroke-miterlimit='10' x1='10.333' y1='4.166' x2='10.333' y2='12.5'/%3E%3C/svg%3E");
+        }
+
+        .reset & {
+            background-image: url("data:image/svg+xml;charset=utf8,%3Csvg version='1.1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' x='0px' y='0px' width='16.667px' height='16.667px' viewBox='0 0 16.667 16.667' enable-background='new 0 0 16.667 16.667' xml:space='preserve'%3E%3Cg%3E%3Cg%3E%3Cpath fill='none' stroke='%23000000' stroke-linecap='square' stroke-miterlimit='10' d='M10.456,12.063 c-0.626,0.357-1.351,0.562-2.123,0.562c-2.37,0-4.292-1.921-4.292-4.292s1.921-4.292,4.292-4.292s4.292,1.921,4.292,4.292'/%3E%3Cg%3E%3Cpolygon fill='%23000000' points='15.061,8.007 10.201,8.007 12.631,10.437 '/%3E%3C/g%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        }
+
+        &:hover {
+            cursor: pointer;
+        }
+    }
+
+    &__years {
+        float: left;
+        width: calc(100% - #{rem(55)});
+    }
+
+    &__year {
+        box-sizing: border-box;
+        color: black;
+        display: inline-block;
+        font-size: rem(14);
+        font-weight: 700;
+        height: rem(32);
+        line-height: rem(32);
+        text-align: center;
+
+        &:hover {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        &--active {
+            border-bottom: 4px solid black;
+
+            &:hover {
+                cursor: default;
+                text-decoration: none;
+            }
+        }
+    }
+}

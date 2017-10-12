@@ -1,6 +1,8 @@
-// import $                                from 'jquery'
+import $                                from 'jquery'
+import FlowMap                          from './modules/flow-map'
 
-// const $map = $('.flow-map')
-// if ($map.length > 0) {
-    
-// }
+const $map = $('.flow-map')
+$map.each((index, element) => {
+    const flowMap = new FlowMap(element)
+    flowMap.init()
+})

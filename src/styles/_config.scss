@@ -12,7 +12,6 @@ $min-width:                             320;
 // Colours
 // --------------------------------------------------------------------------
 
-$text:                                  #474747;
 
 
 // Fonts
@@ -22,3 +21,12 @@ $font-stack:                            "proxima-nova",sans-serif;
 $font-size:                             rem(16);
 $line-height:                           1.25;
 $font-weight:                           normal;
+
+
+html, body {
+    min-height: 100%;
+}
+
+body {
+    height: 100%;
+}

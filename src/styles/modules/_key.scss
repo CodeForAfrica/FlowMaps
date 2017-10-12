@@ -1,0 +1,58 @@
+.key {
+    margin-top: rem(20);
+
+    @media (min-width: 550px) {
+        float: left;
+        line-height: rem(48);
+        margin-right: rem(80);
+        margin-top: 0;
+    }
+
+    &__item {
+        display: inline-block;
+        font-weight: 200;
+        vertical-align: middle;
+
+        &:hover {
+            cursor: pointer;
+        }
+
+        &.active {
+            font-weight: 700;
+
+            &:hover {
+                cursor: default;
+            }
+        }
+    }
+
+    &__lozenge {
+        background: #3C5468;
+        border-radius: rem(7);
+        display: inline-block;
+        height: rem(14);
+        margin-left: rem(16);
+        margin-right: rem(16);
+        position: relative;
+        vertical-align: middle;
+        width: rem(44);
+
+        &:hover {
+            cursor: pointer;
+        }
+
+        .key__lozenge-disc {
+            border-radius: 50%;
+            display: block;
+            height: rem(14);
+            position: absolute;
+            right: 0;
+            width: rem(14);
+
+            .key__item--sending.active + & {
+                left: 0;
+                right: auto;
+            }
+        }
+    }
+}

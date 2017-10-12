@@ -111,7 +111,6 @@ section {
 
 body {
     -webkit-tap-highlight-color: transparent;
-    color: $text;
     font-family: $font-stack;
     font-size: $font-size;
     font-weight: $font-weight;
@@ -147,10 +146,6 @@ h1 {
 h2 {
     font-size: rem(18);
     line-height: rem(30);
-}
-
-h1, h2, h3, h4, h5, h6 {
-    color: $text;
 }
 
 a,
