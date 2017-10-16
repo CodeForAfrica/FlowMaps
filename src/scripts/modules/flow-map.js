@@ -5,9 +5,11 @@ import shuffle                          from '../utils/shuffle'
 import throttle                         from '../utils/throttle'
 import hexToRgb                         from '../utils/hexToRgb'
 import socialMedia                      from './social-media'
+import numberWithCommas                 from '../utils/numberWithCommas'
 
 const WIDTH = 960
 const HEIGHT = 410
+const COLOR_TEXT = '#192A3A'
 
 class FlowMap {
     constructor(map) {
@@ -26,6 +28,8 @@ class FlowMap {
         this.receivingText = this.$map.data('receivingText') || 'Receiving'
         this.sendingText = this.$map.data('sendingText') || 'Sending'
         this.showSocial = this.$map.data('showSocial') || false
+        this.overlayTextPre = this.$map.data('overlayTextPre') || ''
+        this.overlayTextPost = this.$map.data('overlayTextPost') || ''
         this.dataArray = []
         this.radiusScale = d3.scaleLinear()
         this.$window = $(window)
@@ -34,21 +38,24 @@ class FlowMap {
     init() {
         $('html, body').css('background', this.colorBG)
         this.addMarkup()
+        this.setupGradient()
         this.svg.append('rect').attr('width', WIDTH).attr('height', HEIGHT).attr('fill', this.colorBG)
         this.drawMap()
         this.checkHeight()
 
-        // this.$start.on('click', this.timeline.bind(this))
+        this.$start.on('click', this.timeline.bind(this))
         this.$map.on('click', '.key__item', this.clickKeyItem.bind(this))
         this.$map.on('click', '.key__lozenge', this.clickKeyLozenge.bind(this))
 
-        // $('.map__year-marker').on('click', (e) => {
-        //     this.moveToYear($(e.currentTarget).data('year'))
-        // })
-
-        // this.$yearTracker.on('change', () => {
-        //     this.moveToYear(this.$yearTracker.val())
-        // })
+        this.$timelineYears.on('click', (e) => {
+            const $target = $(e.currentTarget)
+            if ($target.hasClass('timeline__year--active')) {
+                return false
+            } else {
+                $target.addClass('timeline__year--active').siblings().removeClass('timeline__year--active')
+                this.moveToYear($target.data('year'))
+            }
+        })
 
         throttle('resize', 'resize.map')
         this.$window.on('resize.map', () => {
@@ -56,6 +63,23 @@ class FlowMap {
         })
 
         socialMedia()
+    }
+
+    setupGradient() {
+        const svgDefs = this.svg.append('defs')
+
+        const mainGradient = svgDefs.append('linearGradient')
+            .attr('id', 'flow-gradient')
+
+        // Create the stops of the main gradient. Each stop will be assigned
+        // a class to style the stop using CSS.
+        mainGradient.append('stop')
+            .attr('stop-color', this.colorReceiving)
+            .attr('offset', '0')
+
+        mainGradient.append('stop')
+            .attr('stop-color', this.colorSending)
+            .attr('offset', '1')
     }
 
     addMarkup() {
@@ -139,7 +163,7 @@ class FlowMap {
         const hex = hexToRgb(modeColor)
         for (let i = this.startYear; i < this.endYear + 1; i++) {
             const className = i === this.startYear ? 'timeline__year timeline__year--active' : 'timeline__year'
-            timeline += `<span class="${className}" style="width:${100 * yearFraction}%;background:rgba(${hex.r},${hex.g},${hex.b},${this.opacities[i - this.startYear]})">${i}</span>`
+            timeline += `<span class="${className}" data-year="${i}" style="width:${100 * yearFraction}%;background:rgba(${hex.r},${hex.g},${hex.b},${this.opacities[i - this.startYear]})">${i}</span>`
         }
         timeline += '</div></div>'
         this.$header = $('.flow-map__header')
@@ -148,6 +172,7 @@ class FlowMap {
         this.$svg = $('.flow-map__svg')
         this.$timeline = $('.timeline')
         this.$timelineYears = this.$timeline.find('.timeline__year')
+        this.$start = $('.timeline__play')
     }
 
     checkHeight() {
@@ -179,15 +204,15 @@ class FlowMap {
         const color = this.mode === 'receiving' ? this.colorReceiving : this.colorSending
         $('.key__lozenge-disc').css('background', color)
 
-        d3.selectAll('.flow-map__sending-circle')
+        this.circles
             .transition()
             .duration(300)
                 .attr('r', (d) => {
                     if (d[this.year] !== undefined) {
                         if (this.mode === 'receiving') {
-                            return this.radiusScale(parseFloat(d[this.year].receiving_total))
+                            return d[this.year].receiving_total > 0 ? this.radiusScale(parseFloat(d[this.year].receiving_total)) : 0
                         } else {
-                            return this.radiusScale(parseFloat(d[this.year].sending_total))
+                            return d[this.year].sending_total > 0 ? this.radiusScale(parseFloat(d[this.year].sending_total)) : 0
                         }
                     } else {
                         return 0
@@ -232,27 +257,39 @@ class FlowMap {
                     sendingCountryEntry = this.dataArray.find(o => o.name === data[i].sending_name)
                     receivingCountryEntry = this.dataArray.find(o => o.name === data[i].receiving_name)
                     minAmount += parseFloat(data[i].amount)
+                    
                     if (sendingCountryEntry !== undefined) {
                         if (sendingCountryEntry[data[i].year] !== undefined) {
                             sendingCountryEntry[data[i].year].sending_total += parseFloat(data[i].amount)
                             sendingCountryEntry[data[i].year].receiving_countries.push(data[i].receiving_name)
+                            sendingCountryEntry[data[i].year].amounts_sent.push(parseFloat(data[i].amount))
                         } else {
                             sendingCountryEntry[data[i].year] = {
                                 'sending_total': parseFloat(data[i].amount),
                                 'receiving_countries': [data[i].receiving_name],
+                                'amounts_sent': [parseFloat(data[i].amount)],
                                 'receiving_total': 0,
-                                'sending_countries': []
+                                'sending_countries': [],
+                                'amounts_received': []
                             }
                         }
                     } else {
+                        const COUNTRY_PATH = COUNTRY_PATHS.filter((x) => {
+                            return x.properties.name === data[i].sending_name
+                        })
+
                         const object = {
-                            'name': data[i].sending_name
+                            'name': data[i].sending_name,
+                            'id': `${i}-s`,
+                            'center': PATH.centroid(COUNTRY_PATH.data()[0])
                         }
                         object[data[i].year] = {
                             'sending_total': parseFloat(data[i].amount),
                             'receiving_countries': [data[i].receiving_name],
+                            'amounts_sent': [parseFloat(data[i].amount)],
                             'receiving_total': 0,
-                            'sending_countries': []
+                            'sending_countries': [],
+                            'amounts_received': []
                         }
                         this.dataArray.push(object)
                     }
@@ -261,23 +298,34 @@ class FlowMap {
                         if (receivingCountryEntry[data[i].year] !== undefined) {
                             receivingCountryEntry[data[i].year].receiving_total += parseFloat(data[i].amount)
                             receivingCountryEntry[data[i].year].sending_countries.push(data[i].sending_name)
+                            receivingCountryEntry[data[i].year].amounts_received.push(parseFloat(data[i].amount))
                         } else {
                             receivingCountryEntry[data[i].year] = {
                                 'receiving_total': parseFloat(data[i].amount),
                                 'sending_countries': [data[i].sending_name],
+                                'amounts_received': [parseFloat(data[i].amount)],
                                 'sending_total': 0,
-                                'receiving_countries': []
+                                'receiving_countries': [],
+                                'amounts_sent': []
                             }
                         }
                     } else {
+                        const COUNTRY_PATH = COUNTRY_PATHS.filter((x) => {
+                            return x.properties.name === data[i].receiving_name
+                        })
+
                         const object = {
-                            'name': data[i].receiving_name
+                            'name': data[i].receiving_name,
+                            'id': `${i}-r`,
+                            'center': PATH.centroid(COUNTRY_PATH.data()[0])
                         }
                         object[data[i].year] = {
                             'receiving_total': parseFloat(data[i].amount),
                             'sending_countries': [data[i].receiving_name],
+                            'amounts_received': [parseFloat(data[i].amount)],
                             'sending_total': 0,
-                            'receiving_countries': []
+                            'receiving_countries': [],
+                            'amounts_sent': []
                         }
                         this.dataArray.push(object)
                     }
@@ -290,7 +338,7 @@ class FlowMap {
                                 maxAmount = this.dataArray[j][key].sending_total
                             }
 
-                            if (this.dataArray[j][key].sending_total < minAmount) {
+                            if (this.dataArray[j][key].sending_total < minAmount && this.dataArray[j][key].sending_total !== 0) {
                                 minAmount = this.dataArray[j][key].sending_total
                             }
 
@@ -298,32 +346,33 @@ class FlowMap {
                                 maxAmount = this.dataArray[j][key].receiving_total
                             }
 
-                            if (this.dataArray[j][key].receiving_total < minAmount) {
+                            if (this.dataArray[j][key].receiving_total < minAmount && this.dataArray[j][key].receiving_total !== 0) {
                                 minAmount = this.dataArray[j][key].receiving_total
                             }
                         }
                     }
                 }
 
-                this.radiusScale.domain([minAmount, maxAmount]).range([0, 25])
+                this.radiusScale.domain([minAmount, maxAmount]).range([2, 25])
                 this.circleGroups = this.svg.selectAll('.flow-map__group')
                     .data(this.dataArray)
                     .enter().append('g')
-                        .attr('transform', (d) => {
-                            const COUNTRY_PATH = COUNTRY_PATHS.filter((i) => {
-                                return i.properties.name === d.name
-                            })
-                            return `translate(${PATH.centroid(COUNTRY_PATH.data()[0])})`
-                        })
+                        .attr('transform', (d) => `translate(${d.center})`)
+                        .attr('data-x', (d) => d.center[0])
+                        .attr('data-y', (d) => d.center[1])
                         .attr('class', 'flow-map__group')
+                        .attr('id', (d) => `group-${d.id}`)
+                        .on('mouseover', this.activateGroup.bind(this))
+                        .on('mouseout', this.deactivateGroup.bind(this))
 
-                this.circleGroups.append('circle')
+
+                this.circles = this.circleGroups.append('circle')
                     .attr('r', (d) => {
                         if (d[this.year] !== undefined) {
                             if (this.mode === 'receiving') {
-                                return this.radiusScale(parseFloat(d[this.year].receiving_total))
+                                return d[this.year].receiving_total > 0 ? this.radiusScale(parseFloat(d[this.year].receiving_total)) : 0
                             } else {
-                                return this.radiusScale(parseFloat(d[this.year].sending_total))
+                                return d[this.year].sending_total > 0 ? this.radiusScale(parseFloat(d[this.year].sending_total)) : 0
                             }
                         } else {
                             return 0
@@ -338,164 +387,253 @@ class FlowMap {
                         }
                     })
                     .attr('class', 'flow-map__sending-circle')
+                    .attr('id', (d) => `circle-${d.id}`)
             })
         })
     }
 
-    // hideOverlay(d) {
-    //     d3.select(`#overlay-${d.id}`).remove()
-    // }
+    activateGroup(d) {
+        let group = $(`#group-${d.id}`)
+        this.circles.filter((data) => data.id !== d.id)
+            .transition()
+            .duration(300)
+                .attr('r', (data) => {
+                    if (this.mode === 'receiving' && d[this.year].sending_countries.indexOf(data.name) >= 0) {
+                        const index = data[this.year].receiving_countries.indexOf(d.name)
+                        return data[this.year].amounts_sent[index] > 0 ? this.radiusScale(parseFloat(data[this.year].amounts_sent[index])) : 0
+                    } else if (this.mode === 'sending' && d[this.year].receiving_countries.indexOf(data.name) >= 0) {
+                        const index = data[this.year].sending_countries.indexOf(d.name)
+                        return data[this.year].amounts_sent[index] > 0 ? this.radiusScale(parseFloat(data[this.year].amounts_received[index])) : 0
+                    } else {
+                        return 0
+                    }
+                })
+                .attr('fill', this.mode === 'receiving' ? this.colorSending : this.colorReceiving)
+                .attr('opacity', 1)
+        // console.log(d)
+        d3.select(`#group-${d.id}`).raise().select('circle').transition().duration(300).attr('opacity', 1)
+        this.circleGroups.filter((data) => {
+            // console.log(d, this.year, d[this.year], d[this.year].sending_countries)
+            if ((this.mode === 'receiving' && d[this.year].sending_countries.indexOf(data.name) >= 0) || (this.mode === 'sending' && d[this.year].receiving_countries.indexOf(data.name) >= 0)) {
+                return true
+            } else {
+                return false
+            }
+        }).insert('line', ':first-child')
+            .attr('x1', (data) => {
+                if(this.mode === 'sending') {
+                    return parseInt(group.data('x')) - parseInt(data.center[0])
+                } else {
+                    return 0
+                }
+            })
+            .attr('y1', (data) => {
+                if(this.mode === 'sending') {
+                    return parseInt(group.data('y')) - parseInt(data.center[1])
+                } else {
+                    return 0
+                }
+            })
+            .attr('x2', (data) => {
+                if(this.mode === 'receiving') {
+                    return parseInt(group.data('x')) - parseInt(data.center[0])
+                } else {
+                    return 0
+                }
+            })
+            .attr('y2', (data) => {
+                if(this.mode === 'receiving') {
+                    return parseInt(group.data('y')) - parseInt(data.center[1])
+                } else {
+                    return 0
+                }
+            })
+            .attr('stroke', 'url(#flow-gradient)')
+            // .attr('transform', (data) => {
+            //     const angle = Math.tan((parseInt(group.data('y')) - parseInt(data.center[1])) / parseInt(group.data('x')) - parseInt(data.center[0]))
+            //     return `rotate(${angle}, 0, 0)`
+            // })
+            .attr('class', 'flow-map__line')
+            .attr('stroke-dasharray', (data) => {
+                const length = Math.sqrt((parseInt(group.data('x')) - parseInt(data.center[0])) * (parseInt(group.data('x')) - parseInt(data.center[0])) + (parseInt(group.data('y')) - parseInt(data.center[1])) * (parseInt(group.data('y')) - parseInt(data.center[1])))
+                return `${length}, ${length}`
+            })
+            .attr('stroke-dashoffset', (data) => {
+                const length = Math.sqrt((parseInt(group.data('x')) - parseInt(data.center[0])) * (parseInt(group.data('x')) - parseInt(data.center[0])) + (parseInt(group.data('y')) - parseInt(data.center[1])) * (parseInt(group.data('y')) - parseInt(data.center[1])))
+                return length
+            })
+            .transition()
+                .delay(300)
+                .duration(500)
+                .attr('stroke-dashoffset', '0')
 
-    // showOverlay(d) {
-    //     if (window.matchMedia('(max-width: 640px)').matches) {
-    //         return
-    //     }
+        this.showOverlay(d, group)
+    }
+
+    deactivateGroup(d) {
+        this.hideOverlay(d)
+        d3.selectAll('.flow-map__line').remove()
+
+        this.circles.transition()
+            .duration(300)
+                .attr('r', (data) => {
+                    if (data[this.year] !== undefined) {
+                        if (this.mode === 'receiving') {
+                            return data[this.year].receiving_total > 0 ? this.radiusScale(parseFloat(data[this.year].receiving_total)) : 0
+                        } else {
+                            return data[this.year].sending_total > 0 ? this.radiusScale(parseFloat(data[this.year].sending_total)) : 0
+                        }
+                    } else {
+                        return 0
+                    }
+                })
+                .attr('fill', this.mode === 'receiving' ? this.colorReceiving : this.colorSending)
+                .attr('opacity', 0.82)
+    }
+
+    hideOverlay(d) {
+        d3.select(`#overlay-${d.id}`).remove()
+    }
+
+    showOverlay(d, group) {
+        if (window.matchMedia('(max-width: 640px)').matches) {
+            return
+        }
+        const X = parseInt(group.data('x'))
+        const Y = parseInt(group.data('y'))
+
+        this.addOverlayGroup(X, Y, d)
+        this.addOverlayBox()
+        this.addOverlayNubbin()
+        this.addOverlayCountryText(d)
+        this.addOverlayCountryType(d)
+    }
+
+    addOverlayGroup(X, Y, d) {
+        let radius = 0
+        if (this.mode === 'receiving') {
+            radius = this.radiusScale(parseFloat(d[this.year].receiving_total))
+        } else {
+            radius = this.radiusScale(parseFloat(d[this.year].sending_total))
+        }
+        this.overlay = this.svg.append('g')
+            .attr('id', `overlay-${d.id}`)
+            .attr('transform', `translate(${X - 80}, ${Y - 48 - radius})`)
+    }
+
+    addOverlayBox() {
+        this.overlay.append('rect')
+            .attr('width', 160)
+            .attr('height', 40)
+            .attr('x', 0)
+            .attr('y', 0)
+            .attr('rx', 5)
+            .attr('ry', 5)
+            .attr('fill', '#FFFFFF')
+    }
+
+    addOverlayNubbin() {
+        this.overlay.append('polyline')
+            .attr('fill', '#FFFFFF')
+            .attr('points', '75 39 85 39 80 45')
+    }
+
+    addOverlayCountryText(d) {
+        this.overlay.append('text')
+            .text(d.name.toUpperCase())
+            .attr('font-size', d.name.length > 22 ? '7' : '11')
+            .attr('font-family', 'proxima-nova')
+            .attr('font-weight', 'light')
+            .attr('x', 80)
+            .attr('y', 18)
+            .attr('fill', COLOR_TEXT)
+            .attr('text-anchor', 'middle')
+    }
+
+    addOverlayCountryType(d) {
+        let amount = this.mode === 'receiving' ? d[this.year].receiving_total : d[this.year].sending_total
+        amount = numberWithCommas(Math.round(amount))
+        amount = this.overlayTextPre + amount + this.overlayTextPost
+        this.overlay.append('text')
+            .text(amount)
+            .attr('font-family', 'proxima-nova')
+            .attr('font-size', '9')
+            .attr('font-weight', 'bold')
+            .attr('x', 80)
+            .attr('y', 30)
+            .attr('fill', COLOR_TEXT)
+            .attr('text-anchor', 'middle')
+    }
+
+    timeline(e) {
+        const $TARGET = $(e.currentTarget)
         
-    //     const X = parseInt($(`[data-country="${d.country}"]`).data('x'))
-    //     const Y = parseInt($(`[data-country="${d.country}"]`).data('y'))
-    //     const SHOW_RIGHT = (X > 510 && X < WIDTH - 350) || X < 350
+        if ($TARGET.hasClass('timeline__pause')) {
+            $TARGET.removeClass('timeline__pause')
+            clearInterval(this.yearInterval)
+            if (this.year === this.endYear) {
+                $TARGET.addClass('timeline__reset')
+            } else {
+                $TARGET.removeClass('timeline__reset')
+            }
+        } else if ($TARGET.hasClass('timeline__reset')) {
+            this.$timelineYears.filter(`[data-year=${this.startYear}]`).addClass('timeline__year--active').siblings().removeClass('timeline__year--active')
+            this.moveToYear(this.startYear)
+        } else {
+            $TARGET.removeClass('timeline__reset')
+            $TARGET.addClass('timeline__pause')
+            this.yearInterval = setInterval(() => {
+                this.year += 1
+                this.$timelineYears.filter(`[data-year=${this.year}]`).addClass('timeline__year--active').siblings().removeClass('timeline__year--active')
+                this.circles
+                    .transition()
+                    .duration(300)
+                        .attr('r', (d) => {
+                            if (d[this.year] !== undefined) {
+                                if (this.mode === 'receiving') {
+                                    return d[this.year].receiving_total > 0 ? this.radiusScale(parseFloat(d[this.year].receiving_total)) : 0
+                                } else {
+                                    return d[this.year].sending_total > 0 ? this.radiusScale(parseFloat(d[this.year].sending_total)) : 0
+                                }
+                            } else {
+                                return 0
+                            }
+                        })
 
-    //     this.addOverlayGroup(SHOW_RIGHT, X, Y, d)
-    //     this.addOverlayBox(SHOW_RIGHT)
-    //     this.addOverlayNubbin(SHOW_RIGHT)
-    //     this.addOverlayCountryText(SHOW_RIGHT, d)
-    //     this.addOverlayCountryType(SHOW_RIGHT, d)
+                if(this.year >= this.endYear) { 
+                    clearInterval(this.yearInterval) 
+                    $TARGET.removeClass('timeline__pause')
+                    $TARGET.addClass('timeline__reset')
+                }
+            }, 1000)
+        }
+    }
 
-    //     if (d[`sending_${this.year}`] > 0) {     
-    //         this.addOverlayTransactionsCircle(COLOR_SENDING, 8, SHOW_RIGHT)       
-    //         this.addOverlayTransactionsText(d[`sending_${this.year}`], 2, SHOW_RIGHT)
-
-    //         if (d[`receiving_${this.year}`] > 0) {
-    //             this.addOverlayTransactionsCircle(COLOR_RECEIVING, 22, SHOW_RIGHT)
-    //             this.addOverlayTransactionsText(d[`receiving_${this.year}`], 16, SHOW_RIGHT)
-    //         }
-    //     } else {
-    //         this.addOverlayTransactionsCircle(COLOR_RECEIVING, 8, SHOW_RIGHT)
-    //         this.addOverlayTransactionsText(d[`receiving_${this.year}`], 2, SHOW_RIGHT)
-    //     }
-    // }
-
-    // addOverlayGroup(SHOW_RIGHT, X, Y, d) {
-    //     this.overlay = this.svg.append('g')
-    //         .attr('id', `overlay-${d.id}`)
-    //         .attr('transform', SHOW_RIGHT ? `translate(${X}, ${Y})` : `translate(${X - 180}, ${Y})`)
-    //         .attr('style', 'filter:url(#dropshadow)')
-    // }
-
-    // addOverlayBox(SHOW_RIGHT) {
-    //     this.overlay.append('rect')
-    //         .attr('width', 160)
-    //         .attr('height', 84)
-    //         .attr('x', SHOW_RIGHT ? 20 : 0)
-    //         .attr('y', -42)
-    //         .attr('fill', COLOR_WHITE)
-    // }
-
-    // addOverlayNubbin(SHOW_RIGHT) {
-    //     this.overlay.append('polyline')
-    //         .attr('fill', COLOR_WHITE)
-    //         .attr('points', SHOW_RIGHT ? '12 0 21 -5 21 5' : '159 -5 159 5 168 0')
-    // }
-
-    // addOverlayCountryText(SHOW_RIGHT, d) {
-    //     this.overlay.append('text')
-    //         .text(d.country)
-    //         .attr('font-size', d.country.length > 22 ? '7' : '11')
-    //         .attr('font-family', 'proxima-nova')
-    //         .attr('x', SHOW_RIGHT ? 40 : 20)
-    //         .attr('y', -25)
-    //         .attr('fill', COLOR_TEXT)
-    //         .attr('dominant-baseline', 'hanging')
-    // }
-
-    // addOverlayCountryType(SHOW_RIGHT, d) {
-    //     const MODE_STRING = d[`sending_${this.year}`] > 0 && d[`receiving_${this.year}`] > 0 ? 'Sending / receiving country' : d[`sending_${this.year}`] > 0 ? 'Sending country' : 'Receiving country'
-    //     this.overlay.append('text')
-    //         .text(MODE_STRING)
-    //         .attr('font-family', 'proxima-nova')
-    //         .attr('font-size', '9')
-    //         .attr('x', SHOW_RIGHT ? 40 : 20)
-    //         .attr('y', -12)
-    //         .attr('fill', COLOR_TEXT)
-    //         .attr('dominant-baseline', 'hanging')
-    // }
-
-    // addOverlayTransactionsCircle(color, y, SHOW_RIGHT) {
-    //     this.overlay.append('circle')
-    //         .attr('cx', SHOW_RIGHT ? 44 : 24)
-    //         .attr('cy', y)
-    //         .attr('r', 4)
-    //         .attr('fill', color)
-    // }
-
-    // addOverlayTransactionsText(value, y, SHOW_RIGHT) {
-    //     this.overlay.append('text')
-    //         .text(value === 1 ? value + ' relationship' : value + ' relationships')
-    //         .attr('font-family', 'proxima-nova')
-    //         .attr('font-size', '11')
-    //         .attr('x', SHOW_RIGHT ? 55 : 35)
-    //         .attr('y', y)
-    //         .attr('fill', COLOR_TEXT)
-    //         .attr('dominant-baseline', 'hanging')
-    // }
-
-    // timeline(e) {
-    //     const $TARGET = $(e.currentTarget)
+    moveToYear(year) {
+        this.year = parseInt(year)
+        clearInterval(this.yearInterval)
+        this.$start.removeClass('timeline__pause')
+        if (this.year === this.endYear) {
+            this.$start.addClass('timeline__reset')
+        } else {
+            this.$start.removeClass('timeline__reset')
+        }
         
-    //     if ($TARGET.hasClass('pause')) {
-    //         $TARGET.removeClass('pause')
-    //         clearInterval(this.yearInterval)
-    //         if (this.year === MAX_YEAR) {
-    //             $TARGET.addClass('reset')
-    //             this.startText.text('Reset')
-    //         } else {
-    //             $TARGET.removeClass('reset')
-    //             this.startText.text('Animate')
-    //         }
-    //     } else if ($TARGET.hasClass('reset')) {
-    //         this.moveToYear(START_YEAR)
-    //     } else {
-    //         $TARGET.removeClass('reset')
-    //         $TARGET.addClass('pause')
-    //         this.startText.text('Pause')
-    //         this.yearInterval = setInterval(() => {
-    //             this.year += 1
-    //             d3.selectAll('.map__marker')
-    //                 .transition()
-    //                     .duration(1000)
-    //                     .attr('r', (d) => d[`${this.mode}_${this.year}`] > 0 ? this.radiusScale(d[`${this.mode}_${this.year}`]) : 0)
-
-    //             this.$yearTracker.val(this.year)
-
-    //             if(this.year >= MAX_YEAR) { 
-    //                 clearInterval(this.yearInterval) 
-    //                 $TARGET.removeClass('pause')
-    //                 this.startText.text('Reset')
-    //                 $TARGET.addClass('reset')
-    //             }
-    //         }, 1000)
-    //     }
-    // }
-
-    // moveToYear(year) {
-    //     this.year = parseInt(year)
-    //     clearInterval(this.yearInterval)
-    //     this.$start.removeClass('pause')
-    //     if (this.year === MAX_YEAR) {
-    //         this.$start.addClass('reset')
-    //         this.startText.text('Reset')
-    //     } else {
-    //         this.$start.removeClass('reset')
-    //         this.startText.text('Animate')
-    //     }
-        
-    //     d3.selectAll('.map__marker')
-    //         .transition()
-    //             .duration(1000)
-    //             .attr('r', (d) => d[`${this.mode}_${this.year}`] > 0 ? this.radiusScale(d[`${this.mode}_${this.year}`]) : 0)
-
-    //     this.$yearTracker.val(this.year)
-    // }
+        this.circles
+            .transition()
+            .duration(300)
+                .attr('r', (d) => {
+                    if (d[this.year] !== undefined) {
+                        if (this.mode === 'receiving') {
+                            return d[this.year].receiving_total > 0 ? this.radiusScale(parseFloat(d[this.year].receiving_total)) : 0
+                        } else {
+                            return d[this.year].sending_total > 0 ? this.radiusScale(parseFloat(d[this.year].sending_total)) : 0
+                        }
+                    } else {
+                        return 0
+                    }
+                })
+    }
 }
 
 export default FlowMap
