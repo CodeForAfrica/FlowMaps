@@ -68,18 +68,28 @@ class FlowMap {
     setupGradient() {
         const svgDefs = this.svg.append('defs')
 
-        const mainGradient = svgDefs.append('linearGradient')
-            .attr('id', 'flow-gradient')
+        const sendingGradient = svgDefs.append('linearGradient')
+            .attr('id', 'flow-gradient-sending')
+        const receivingGradient = svgDefs.append('linearGradient')
+            .attr('id', 'flow-gradient-receiving')
 
         // Create the stops of the main gradient. Each stop will be assigned
         // a class to style the stop using CSS.
-        mainGradient.append('stop')
+        sendingGradient.append('stop')
             .attr('stop-color', this.colorReceiving)
-            .attr('offset', '0')
+            .attr('offset', '0%')
 
-        mainGradient.append('stop')
+        sendingGradient.append('stop')
             .attr('stop-color', this.colorSending)
-            .attr('offset', '1')
+            .attr('offset', '100%')
+
+        receivingGradient.append('stop')
+            .attr('stop-color', this.colorSending)
+            .attr('offset', '0%')
+
+        receivingGradient.append('stop')
+            .attr('stop-color', this.colorReceiving)
+            .attr('offset', '100%')
     }
 
     addMarkup() {
@@ -321,7 +331,7 @@ class FlowMap {
                         }
                         object[data[i].year] = {
                             'receiving_total': parseFloat(data[i].amount),
-                            'sending_countries': [data[i].receiving_name],
+                            'sending_countries': [data[i].sending_name],
                             'amounts_received': [parseFloat(data[i].amount)],
                             'sending_total': 0,
                             'receiving_countries': [],
@@ -403,56 +413,37 @@ class FlowMap {
                         return data[this.year].amounts_sent[index] > 0 ? this.radiusScale(parseFloat(data[this.year].amounts_sent[index])) : 0
                     } else if (this.mode === 'sending' && d[this.year].receiving_countries.indexOf(data.name) >= 0) {
                         const index = data[this.year].sending_countries.indexOf(d.name)
-                        return data[this.year].amounts_sent[index] > 0 ? this.radiusScale(parseFloat(data[this.year].amounts_received[index])) : 0
+                        return data[this.year].amounts_received[index] > 0 ? this.radiusScale(parseFloat(data[this.year].amounts_received[index])) : 0
                     } else {
                         return 0
                     }
                 })
                 .attr('fill', this.mode === 'receiving' ? this.colorSending : this.colorReceiving)
                 .attr('opacity', 1)
-        // console.log(d)
+        
         d3.select(`#group-${d.id}`).raise().select('circle').transition().duration(300).attr('opacity', 1)
         this.circleGroups.filter((data) => {
-            // console.log(d, this.year, d[this.year], d[this.year].sending_countries)
             if ((this.mode === 'receiving' && d[this.year].sending_countries.indexOf(data.name) >= 0) || (this.mode === 'sending' && d[this.year].receiving_countries.indexOf(data.name) >= 0)) {
                 return true
             } else {
                 return false
             }
         }).insert('line', ':first-child')
-            .attr('x1', (data) => {
-                if(this.mode === 'sending') {
-                    return parseInt(group.data('x')) - parseInt(data.center[0])
-                } else {
-                    return 0
-                }
-            })
-            .attr('y1', (data) => {
-                if(this.mode === 'sending') {
-                    return parseInt(group.data('y')) - parseInt(data.center[1])
-                } else {
-                    return 0
-                }
-            })
+            .attr('x1', 0)
+            .attr('y1', 0)
             .attr('x2', (data) => {
-                if(this.mode === 'receiving') {
-                    return parseInt(group.data('x')) - parseInt(data.center[0])
-                } else {
-                    return 0
-                }
+                const length = Math.sqrt((parseInt(group.data('x')) - parseInt(data.center[0])) * (parseInt(group.data('x')) - parseInt(data.center[0])) + (parseInt(group.data('y')) - parseInt(data.center[1])) * (parseInt(group.data('y')) - parseInt(data.center[1])))
+                return length
             })
-            .attr('y2', (data) => {
-                if(this.mode === 'receiving') {
-                    return parseInt(group.data('y')) - parseInt(data.center[1])
-                } else {
-                    return 0
+            .attr('y2', 1)
+            .attr('stroke', this.mode === 'receiving' ? 'url(#flow-gradient-receiving)' : 'url(#flow-gradient-sending)')
+            .attr('transform', (data) => {
+                let angle = Math.atan((group.data('y') - data.center[1]) / (group.data('x') - data.center[0]))
+                if (group.data('x') < data.center[0]) {
+                    angle += Math.PI
                 }
+                return `rotate(${angle * 180 / Math.PI}, 0, 0)`
             })
-            .attr('stroke', 'url(#flow-gradient)')
-            // .attr('transform', (data) => {
-            //     const angle = Math.tan((parseInt(group.data('y')) - parseInt(data.center[1])) / parseInt(group.data('x')) - parseInt(data.center[0]))
-            //     return `rotate(${angle}, 0, 0)`
-            // })
             .attr('class', 'flow-map__line')
             .attr('stroke-dasharray', (data) => {
                 const length = Math.sqrt((parseInt(group.data('x')) - parseInt(data.center[0])) * (parseInt(group.data('x')) - parseInt(data.center[0])) + (parseInt(group.data('y')) - parseInt(data.center[1])) * (parseInt(group.data('y')) - parseInt(data.center[1])))
@@ -460,12 +451,12 @@ class FlowMap {
             })
             .attr('stroke-dashoffset', (data) => {
                 const length = Math.sqrt((parseInt(group.data('x')) - parseInt(data.center[0])) * (parseInt(group.data('x')) - parseInt(data.center[0])) + (parseInt(group.data('y')) - parseInt(data.center[1])) * (parseInt(group.data('y')) - parseInt(data.center[1])))
-                return length
+                return this.mode === 'receiving' ? length : -length
             })
             .transition()
                 .delay(300)
                 .duration(500)
-                .attr('stroke-dashoffset', '0')
+                .attr('stroke-dashoffset', 0)
 
         this.showOverlay(d, group)
     }
@@ -552,7 +543,12 @@ class FlowMap {
 
     addOverlayCountryType(d) {
         let amount = this.mode === 'receiving' ? d[this.year].receiving_total : d[this.year].sending_total
-        amount = numberWithCommas(Math.round(amount))
+        if (Math.round(amount) >= 10) {
+            amount = numberWithCommas(Math.round(amount))
+        } else {
+            amount = Math.round(amount * 10) / 10
+        }
+        
         amount = this.overlayTextPre + amount + this.overlayTextPost
         this.overlay.append('text')
             .text(amount)
