@@ -257,6 +257,8 @@ class FlowMap {
                     .attr('stroke-width', 0.5)
                     .attr('fill', this.colorMap)
                     .attr('data-name', (d) => d.name)
+                    .on('mouseover', this.activateCountry.bind(this))
+                    .on('mouseout', this.deactivateCountry.bind(this))
 
             d3.csv(URL + '/data/data.csv', (error, data) => {
                 let maxAmount = 0
@@ -372,6 +374,8 @@ class FlowMap {
                         .attr('data-y', (d) => d.center[1])
                         .attr('class', 'flow-map__group')
                         .attr('id', (d) => `group-${d.id}`)
+                        .attr('data-sending', (d) => d[this.year] !== undefined && d[this.year].sending_total > 0)
+                        .attr('data-receiving', (d) => d[this.year] !== undefined && d[this.year].receiving_total > 0)
                         .on('mouseover', this.activateGroup.bind(this))
                         .on('mouseout', this.deactivateGroup.bind(this))
 
@@ -402,6 +406,25 @@ class FlowMap {
         })
     }
 
+    activateCountry(d) {
+        let name = d.properties.name
+        let data = this.dataArray.find((element) => element.name === name)
+        if (data !== undefined) {
+            let group = $(`#group-${data.id}`)
+            if (group.length > 0 && group.data(this.mode) === true) {
+                this.activateGroup(data)
+            }
+        }
+    }
+
+    deactivateCountry(d) {
+        let name = d.properties.name
+        let data = this.dataArray.find((element) => element.name === name)
+        if (data !== undefined) {
+            this.deactivateGroup(data)
+        }
+    }
+
     activateGroup(d) {
         let group = $(`#group-${d.id}`)
         this.circles.filter((data) => data.id !== d.id)
@@ -421,7 +444,19 @@ class FlowMap {
                 .attr('fill', this.mode === 'receiving' ? this.colorSending : this.colorReceiving)
                 .attr('opacity', 1)
         
-        d3.select(`#group-${d.id}`).raise().select('circle').transition().duration(300).attr('opacity', 1)
+        d3.select(`#group-${d.id}`).raise().select('circle')
+            .transition()
+            .duration(300)
+                .attr('r', () => {
+                    if (this.mode === 'receiving') {
+                        return d[this.year].receiving_total > 0 ? this.radiusScale(parseFloat(d[this.year].receiving_total)) : 0
+                    } else {
+                        return d[this.year].sending_total > 0 ? this.radiusScale(parseFloat(d[this.year].sending_total)) : 0
+                    }
+                })
+                .attr('fill', this.mode === 'receiving' ? this.colorReceiving : this.colorSending)
+                .attr('opacity', 1)
+        
         this.circleGroups.filter((data) => {
             if ((this.mode === 'receiving' && d[this.year].sending_countries.indexOf(data.name) >= 0) || (this.mode === 'sending' && d[this.year].receiving_countries.indexOf(data.name) >= 0)) {
                 return true
@@ -435,7 +470,8 @@ class FlowMap {
                 const length = Math.sqrt((parseInt(group.data('x')) - parseInt(data.center[0])) * (parseInt(group.data('x')) - parseInt(data.center[0])) + (parseInt(group.data('y')) - parseInt(data.center[1])) * (parseInt(group.data('y')) - parseInt(data.center[1])))
                 return length
             })
-            .attr('y2', 1)
+            .attr('y2', 0.1)
+            .attr('stroke-width', 2)
             .attr('stroke', this.mode === 'receiving' ? 'url(#flow-gradient-receiving)' : 'url(#flow-gradient-sending)')
             .attr('transform', (data) => {
                 let angle = Math.atan((group.data('y') - data.center[1]) / (group.data('x') - data.center[0]))
