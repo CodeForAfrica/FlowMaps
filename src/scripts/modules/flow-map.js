@@ -7,7 +7,7 @@ import hexToRgb                         from '../utils/hexToRgb'
 import socialMedia                      from './social-media'
 import numberWithCommas                 from '../utils/numberWithCommas'
 
-const WIDTH = 960
+// const WIDTH = 960
 const HEIGHT = 410
 const COLOR_TEXT = '#192A3A'
 
@@ -19,6 +19,7 @@ class FlowMap {
         this.yearInterval = null
         this.startYear = this.$map.data('startYear')
         this.endYear = this.$map.data('endYear')
+        this.yearGap = this.$map.data('yearGap') || 1
         this.year = this.startYear
         this.colorBG = this.$map.data('bgColor') || '#192A3A'
         this.colorText = this.$map.data('textColor') || '#EFEFEF'
@@ -30,6 +31,10 @@ class FlowMap {
         this.showSocial = this.$map.data('showSocial') || false
         this.overlayTextPre = this.$map.data('overlayTextPre') || ''
         this.overlayTextPost = this.$map.data('overlayTextPost') || ''
+        this.zoom = this.$map.data('zoom') || 1
+        this.zoomX = this.$map.data('zoomX') 
+        this.zoomY = this.$map.data('zoomY')
+        this.width = 410 * this.$map.data('ratio') || 960
         this.dataArray = []
         this.radiusScale = d3.scaleLinear()
         this.$window = $(window)
@@ -39,7 +44,13 @@ class FlowMap {
         $('html, body').css('background', this.colorBG)
         this.addMarkup()
         this.setupGradient()
-        this.svg.append('rect').attr('width', WIDTH).attr('height', HEIGHT).attr('fill', this.colorBG)
+        this.svg.append('rect').attr('width', this.width).attr('height', HEIGHT).attr('fill', this.colorBG)
+        if (this.zoomX !== undefined && this.zoomY !== undefined) {
+            $('.flow-map__zoom-wrapper').css({
+                'transform': `scale(${this.zoom})`,
+                'transform-origin': `${this.zoomX} ${this.zoomY}`
+            })
+        }
         this.drawMap()
         this.checkHeight()
 
@@ -165,20 +176,22 @@ class FlowMap {
             </div>`
         header += '</div>'
         this.$map.append(header)
-        this.$map.append($('<div class="flow-map__visualisation"></div>'))
-        this.svg = d3.select('.flow-map__visualisation').append('svg').attr('viewBox', `0 0 ${WIDTH} ${HEIGHT}`).attr('class', 'flow-map__svg')
+        this.$map.append($('<div class="flow-map__visualisation"><div class="flow-map__svg-wrapper"><div class="flow-map__zoom-wrapper"></div></div></div>'))
+
+        this.svg = d3.select('.flow-map__zoom-wrapper').append('svg').attr('viewBox', `0 0 ${this.width} ${HEIGHT}`).attr('class', 'flow-map__svg')
         let timeline = `<div class="timeline" style="background:${this.colorMap};"><span class="timeline__play"></span><div class="timeline__years">`
-        const yearFraction = 1 / (this.endYear + 1 - this.startYear)
-        this.opacities = shuffle(Array.from(new Array(this.endYear + 1 - this.startYear), (val,index) => (index + 1) * yearFraction))
+        const yearFraction = 1 / ((this.endYear - this.startYear) / this.yearGap + 1)
+        this.opacities = shuffle(Array.from(new Array((this.endYear - this.startYear) / this.yearGap + 1), (val,index) => (index + 1) * yearFraction))
         const hex = hexToRgb(modeColor)
-        for (let i = this.startYear; i < this.endYear + 1; i++) {
+        for (let i = this.startYear; i < this.endYear + 1; i += this.yearGap) {
             const className = i === this.startYear ? 'timeline__year timeline__year--active' : 'timeline__year'
-            timeline += `<span class="${className}" data-year="${i}" style="width:${100 * yearFraction}%;background:rgba(${hex.r},${hex.g},${hex.b},${this.opacities[i - this.startYear]})">${i}</span>`
+            timeline += `<span class="${className}" data-year="${i}" style="width:${100 * yearFraction}%;background:rgba(${hex.r},${hex.g},${hex.b},${this.opacities[(i - this.startYear) / this.yearGap]})">${i}</span>`
         }
         timeline += '</div></div>'
         this.$header = $('.flow-map__header')
         this.$visualisation = $('.flow-map__visualisation')
         this.$visualisation.append($(timeline))
+        this.$svgWrapper = $('.flow-map__svg-wrapper')
         this.$svg = $('.flow-map__svg')
         this.$timeline = $('.timeline')
         this.$timelineYears = this.$timeline.find('.timeline__year')
@@ -187,9 +200,9 @@ class FlowMap {
 
     checkHeight() {
         const WINDOW_HEIGHT = this.$window.outerHeight()
-        const CONTENT_HEIGHT = this.$svg.outerHeight() + this.$timeline.outerHeight() + this.$header.outerHeight()
+        const CONTENT_HEIGHT = this.$svgWrapper.outerHeight() + this.$timeline.outerHeight() + this.$header.outerHeight()
         if (CONTENT_HEIGHT < WINDOW_HEIGHT) {
-            this.$svg.css('margin-top', `${(WINDOW_HEIGHT - CONTENT_HEIGHT) / 2}px`)
+            this.$svgWrapper.css('margin-top', `${(WINDOW_HEIGHT - CONTENT_HEIGHT) / 2}px`)
         }
     }
 
@@ -243,10 +256,10 @@ class FlowMap {
         const PATH = d3.geoPath()
             .projection(projection)
 
-        const URL = window.location.href.split('/').slice(0, -1).join('/')
-
-        d3.json(URL + '/data/world-map.json', (error, world) => {
-            const COUNTRIES = topojson.feature(world, world.objects.mapgeo).features
+        const BASE_URL = window.location.href.split('/').slice(0, -1).join('/')
+        let url = this.$map.data('topojson') ? this.$map.data('topojson') : BASE_URL + '/data/world-map.json'
+        d3.json(url, (error, map) => {
+            const COUNTRIES = topojson.feature(map, map.objects.subunits).features
 
             const COUNTRY_PATHS = this.svg.selectAll('.flow-map__country')
                 .data(COUNTRIES)
@@ -260,7 +273,7 @@ class FlowMap {
                     .on('mouseover', this.activateCountry.bind(this))
                     .on('mouseout', this.deactivateCountry.bind(this))
 
-            d3.csv(URL + '/data/data.csv', (error, data) => {
+            d3.csv(BASE_URL + '/data/immigration-fixed.csv', (error, data) => {
                 let maxAmount = 0
                 let minAmount = 0
                 let sendingCountryEntry
@@ -342,7 +355,7 @@ class FlowMap {
                         this.dataArray.push(object)
                     }
                 }
-
+                
                 for (let j = 0; j < this.dataArray.length; j++) {
                     for (let key in this.dataArray[j]) {
                         if (key !== 'name') {
@@ -615,7 +628,7 @@ class FlowMap {
             $TARGET.removeClass('timeline__reset')
             $TARGET.addClass('timeline__pause')
             this.yearInterval = setInterval(() => {
-                this.year += 1
+                this.year += this.yearGap
                 this.$timelineYears.filter(`[data-year=${this.year}]`).addClass('timeline__year--active').siblings().removeClass('timeline__year--active')
                 this.circles
                     .transition()
