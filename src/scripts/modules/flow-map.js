@@ -38,6 +38,7 @@ class FlowMap {
         this.dataArray = []
         this.radiusScale = d3.scaleLinear()
         this.$window = $(window)
+        this.multipleTimelineLines = false
     }
 
     init() {
@@ -71,6 +72,7 @@ class FlowMap {
         throttle('resize', 'resize.map')
         this.$window.on('resize.map', () => {
             this.checkHeight()
+            this.checkWidth()
         })
 
         socialMedia()
@@ -180,12 +182,19 @@ class FlowMap {
 
         this.svg = d3.select('.flow-map__zoom-wrapper').append('svg').attr('viewBox', `0 0 ${this.width} ${HEIGHT}`).attr('class', 'flow-map__svg')
         let timeline = `<div class="timeline" style="background:${this.colorMap};"><span class="timeline__play"></span><div class="timeline__years">`
-        const yearFraction = 1 / ((this.endYear - this.startYear) / this.yearGap + 1)
-        this.opacities = shuffle(Array.from(new Array((this.endYear - this.startYear) / this.yearGap + 1), (val,index) => (index + 1) * yearFraction))
+        this.numberOfYears = (this.endYear - this.startYear) / this.yearGap + 1
+        this.yearFraction = 1 / this.numberOfYears
+        if (this.yearFraction * (this.$window.outerWidth() - 55) < 50) {
+            let maxPerRow = Math.floor(this.$window.outerWidth() - 55) / 50
+            let rows = Math.ceil(this.numberOfYears / maxPerRow)
+            this.multipleTimelineLines = true
+            this.yearFraction = 1 / Math.floor(this.numberOfYears / rows)
+        }
+        this.opacities = shuffle(Array.from(new Array((this.endYear - this.startYear) / this.yearGap + 1), (val,index) => (index + 1) * this.yearFraction))
         const hex = hexToRgb(modeColor)
         for (let i = this.startYear; i < this.endYear + 1; i += this.yearGap) {
             const className = i === this.startYear ? 'timeline__year timeline__year--active' : 'timeline__year'
-            timeline += `<span class="${className}" data-year="${i}" style="width:${100 * yearFraction}%;background:rgba(${hex.r},${hex.g},${hex.b},${this.opacities[(i - this.startYear) / this.yearGap]})">${i}</span>`
+            timeline += `<span class="${className}" data-year="${i}" style="width:${100 * this.yearFraction}%;background:rgba(${hex.r},${hex.g},${hex.b},${this.opacities[(i - this.startYear) / this.yearGap]})">${i}</span>`
         }
         timeline += '</div></div>'
         this.$header = $('.flow-map__header')
@@ -203,6 +212,24 @@ class FlowMap {
         const CONTENT_HEIGHT = this.$svgWrapper.outerHeight() + this.$timeline.outerHeight() + this.$header.outerHeight()
         if (CONTENT_HEIGHT < WINDOW_HEIGHT) {
             this.$svgWrapper.css('margin-top', `${(WINDOW_HEIGHT - CONTENT_HEIGHT) / 2}px`)
+        }
+    }
+
+    checkWidth() {
+        if (this.yearFraction * (this.$window.outerWidth() - 55) < 50) {
+            let maxPerRow = Math.floor(this.$window.outerWidth() - 55) / 50
+            let rows = Math.ceil(this.numberOfYears / maxPerRow)
+            this.yearFraction = 1 / Math.floor(this.numberOfYears / rows)
+            this.multipleTimelineLines = true
+            this.$timelineYears.css('width', `${100 * this.yearFraction}%`)
+        } else if (this.multipleTimelineLines && this.yearFraction * (this.$window.outerWidth() - 55) >= 50) {
+            let maxPerRow = Math.floor(this.$window.outerWidth() - 55) / 50
+            let rows = Math.ceil(this.numberOfYears / maxPerRow)
+            if (rows === 1) {
+                this.multipleTimelineLines = false
+            }
+            this.yearFraction = 1 / Math.floor(this.numberOfYears / rows)
+            this.$timelineYears.css('width', `${100 * this.yearFraction}%`)
         }
     }
 
@@ -539,12 +566,22 @@ class FlowMap {
         if (window.matchMedia('(max-width: 640px)').matches) {
             return
         }
-        const X = parseInt(group.data('x'))
+        let X = parseInt(group.data('x'))
         const Y = parseInt(group.data('y'))
+        let offLeft = false
+        let offRight = false
+
+        if (X < 80) {
+            X = X + 80
+            offLeft = true
+        } else if (X > this.width - 80) {
+            X = X - 80
+            offRight = true
+        }
 
         this.addOverlayGroup(X, Y, d)
         this.addOverlayBox()
-        this.addOverlayNubbin()
+        this.addOverlayNubbin(offLeft, offRight)
         this.addOverlayCountryText(d)
         this.addOverlayCountryType(d)
     }
@@ -572,10 +609,20 @@ class FlowMap {
             .attr('fill', '#FFFFFF')
     }
 
-    addOverlayNubbin() {
-        this.overlay.append('polyline')
-            .attr('fill', '#FFFFFF')
-            .attr('points', '75 39 85 39 80 45')
+    addOverlayNubbin(offLeft, offRight) {
+        if (offLeft) {
+            this.overlay.append('polyline')
+                .attr('fill', '#FFFFFF')
+                .attr('points', '0 30 10 39 0 45')
+        } else if (offRight) {
+            this.overlay.append('polyline')
+                .attr('fill', '#FFFFFF')
+                .attr('points', '150 39 160 30 160 45')
+        } else {
+            this.overlay.append('polyline')
+                .attr('fill', '#FFFFFF')
+                .attr('points', '75 39 85 39 80 45')
+        }
     }
 
     addOverlayCountryText(d) {
