@@ -15,7 +15,7 @@ Flow maps shows bilateral movement between geographical areas over time. The def
 
 ## API Reference
 
-By default a world map will be displayed. To change this, link to an external TopoJSON file or overwrite the file at `/data/topojson.json` (see [data-topojson](#topojson) for more information). To add your dataset link to an external csv file or overwrite the file at `/data/data.csv` (see [data-data](#data) for more information). 
+By default a world map will be displayed. To change this, link to an external TopoJSON file or overwrite the file at `/data/topojson.json` (see [data-topojson](#topojson) for more information). To add your dataset link to an external csv file or overwrite the file at `/data/data.csv` (see [data-data](#data) for more information). A second example dataset is saved at `/data/african-aid.csv`. 
 
 Flow maps uses [data attributes](https://developer.mozilla.org/en/docs/Web/Guide/HTML/Using_data_attributes) to personalise the visualisation. 
 
