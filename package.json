@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "d3": "^4.2.2",
-    "jquery": "^3.0.0",
+    "jquery": "^3.4.0",
     "pubsub-js": "^1.5.7"
   }
 }
