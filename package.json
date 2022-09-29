@@ -34,7 +34,7 @@
     "vinyl-source-stream": "^1.1.0"
   },
   "dependencies": {
-    "d3": "^4.2.2",
+    "d3": "^7.6.1",
     "jquery": "^3.0.0",
     "pubsub-js": "^1.5.7"
   }
